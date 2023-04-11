@@ -4,6 +4,7 @@ namespace App\Repository;
 
 use App\Entity\Secret;
 use Doctrine\Bundle\DoctrineBundle\Repository\ServiceEntityRepository;
+use Doctrine\ORM\NonUniqueResultException;
 use Doctrine\Persistence\ManagerRegistry;
 
 /**
@@ -21,7 +22,7 @@ class SecretRepository extends ServiceEntityRepository
         parent::__construct($registry, Secret::class);
     }
 
-    public function save(Secret $entity, bool $flush = false): void
+    public function save(Secret $entity, bool $flush = true): void
     {
         $this->getEntityManager()->persist($entity);
 
@@ -39,28 +40,52 @@ class SecretRepository extends ServiceEntityRepository
         }
     }
 
-//    /**
-//     * @return Secret[] Returns an array of Secret objects
-//     */
-//    public function findByExampleField($value): array
-//    {
-//        return $this->createQueryBuilder('s')
-//            ->andWhere('s.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->orderBy('s.id', 'ASC')
-//            ->setMaxResults(10)
-//            ->getQuery()
-//            ->getResult()
-//        ;
-//    }
+    public function toArray(Secret $entity): array
+    {
+        return [
+            "hash" => $entity->getHash(),
+            "secretText" => $entity->getSecretText(),
+            "createdAt" => $entity->getCreatedAt(),
+            "expiresAt" => $entity->getExpiresAt() ?? null,
+            "remainingViews" => $entity->getRemainingViews()
+        ];
+    }
 
-//    public function findOneBySomeField($value): ?Secret
-//    {
-//        return $this->createQueryBuilder('s')
-//            ->andWhere('s.exampleField = :val')
-//            ->setParameter('val', $value)
-//            ->getQuery()
-//            ->getOneOrNullResult()
-//        ;
-//    }
+    public function collection(): array
+    {
+        $result = [];
+
+        foreach($this->getAll() ?? [] as $item) {
+            $result[] = $this->toArray($item);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @return Secret[] Returns an array of Secret objects
+     */
+    public function getAll(): array
+    {
+        return $this->createQueryBuilder('s')
+            ->orderBy('s.id', 'ASC')
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
+     * @throws NonUniqueResultException
+     */
+    public function findByHash(string $hash): ?Secret
+    {
+        return $this->createQueryBuilder('s')
+            ->andWhere('s.hash = :hash')
+            ->andWhere('s.expiresAt > :now')
+            ->andWhere('s.remainingViews > 0')
+            ->setParameter('hash', $hash)
+            ->setParameter('now', new \DateTimeImmutable())
+            ->getQuery()
+            ->getOneOrNullResult()
+        ;
+    }
 }
